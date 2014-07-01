@@ -158,17 +158,19 @@ public class TransferDatabase {
 	return this.platformDestine;
     }
 
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     protected List<Table> sortTables(Table[] tables) {
-	ArrayList<Table> result = new ArrayList();
-	HashSet processed = new HashSet();
+	ArrayList<Table> result = new ArrayList<Table>();
+	HashSet<Table> processed = new HashSet<Table>();
 	ListOrderedMap pending = new ListOrderedMap();
+
 	for (int idx = 0; idx < tables.length; idx++) {
 	    Table table = tables[idx];
 	    if (table.getForeignKeyCount() == 0) {
 		result.add(table);
 		processed.add(table);
 	    } else {
-		HashSet waitedFor = new HashSet();
+		HashSet<Table> waitedFor = new HashSet<Table>();
 		for (int fkIdx = 0; fkIdx < table.getForeignKeyCount(); fkIdx++) {
 		    Table waitedForTable = table.getForeignKey(fkIdx).getForeignTable();
 		    if (!table.equals(waitedForTable)) {
@@ -178,13 +180,15 @@ public class TransferDatabase {
 		pending.put(table, waitedFor);
 	    }
 	}
-	HashSet newProcessed = new HashSet();
+
+	HashSet<Table> newProcessed = new HashSet<Table>();
 	while ((!processed.isEmpty()) && (!pending.isEmpty())) {
 	    newProcessed.clear();
 	    for (Iterator it = pending.entrySet().iterator(); it.hasNext();) {
 		Map.Entry entry = (Map.Entry) it.next();
 		Table table = (Table) entry.getKey();
-		HashSet waitedFor = (HashSet) entry.getValue();
+
+		HashSet<Table> waitedFor = (HashSet<Table>) entry.getValue();
 
 		waitedFor.removeAll(processed);
 		if (waitedFor.isEmpty()) {
@@ -195,14 +199,16 @@ public class TransferDatabase {
 	    }
 	    processed.clear();
 
-	    HashSet tmp = processed;
+	    HashSet<Table> tmp = processed;
 
 	    processed = newProcessed;
 	    newProcessed = tmp;
 	}
+
 	for (Iterator it = pending.keySet().iterator(); it.hasNext();) {
 	    result.add((Table) it.next());
 	}
+
 	return result;
     }
 
@@ -211,7 +217,9 @@ public class TransferDatabase {
 		getTableSchemaSource(), null);
 	getPlatformDestine().createModel(databaseSource, isDropTablesFirst(), isContinueOnError());
 	if (isAutoCommit()) {
-	    getPlatformDestine().getDataSource().getConnection().commit();
+	    if (!getPlatformDestine().getDataSource().getConnection().getAutoCommit()) {
+		getPlatformDestine().getDataSource().getConnection().commit();
+	    }
 	}
     }
 
@@ -245,6 +253,7 @@ public class TransferDatabase {
 
 	    String SQL = getQueryFromTable(table);
 
+	    @SuppressWarnings("rawtypes")
 	    Iterator it = getPlatformSource().query(databaseSource, SQL, new Table[] { table });
 
 	    System.out.print("Copying Data To " + table.getName() + "\n");
@@ -267,7 +276,9 @@ public class TransferDatabase {
 	    System.out.print("Total records copied ( " + total + " )\n");
 	    System.out.print("Total records errors ( " + error + " )\n");
 	    if (isAutoCommit()) {
-		getPlatformDestine().getDataSource().getConnection().commit();
+		if (!getPlatformDestine().getDataSource().getConnection().getAutoCommit()) {
+		    getPlatformDestine().getDataSource().getConnection().commit();
+		}
 	    }
 	}
     }
@@ -280,11 +291,13 @@ public class TransferDatabase {
 
 	FileOutputStream fos = new FileOutputStream(filename, append);
 	Writer writer = new OutputStreamWriter(fos, "UTF8");
+
 	for (Table table : tables) {
 	    System.out.print("Getting Data From " + table.getName() + "\n");
 
 	    String SQL = getQueryFromTable(table);
 
+	    @SuppressWarnings("rawtypes")
 	    Iterator it = getPlatformSource().query(databaseSource, SQL, new Table[] { table });
 
 	    System.out.print("Copying Data To " + table.getName() + "\n");
@@ -295,6 +308,7 @@ public class TransferDatabase {
 		writer.write(";\n");
 	    }
 	}
+
 	writer.close();
 	fos.close();
     }
@@ -308,16 +322,19 @@ public class TransferDatabase {
 	Database databaseSource = dataIO.read(filenme);
 	getPlatformDestine().createModel(databaseSource, isDropTablesFirst(), isContinueOnError());
 	if (isAutoCommit()) {
-	    getPlatformDestine().getDataSource().getConnection().commit();
+	    if (!getPlatformDestine().getDataSource().getConnection().getAutoCommit()) {
+		getPlatformDestine().getDataSource().getConnection().commit();
+	    }
 	}
     }
 
-    private String getQueryFromTable(Table table) {
+    protected String getQueryFromTable(Table table) {
 	StringBuilder query = new StringBuilder();
 
 	int columnsCount = table.getColumnCount();
 
 	query.append("SELECT ");
+
 	for (int index = 0; index < columnsCount; index++) {
 	    if (getPlatformSource().isDelimitedIdentifierModeOn()) {
 		query.append(getPlatformSource().getPlatformInfo().getDelimiterToken());
@@ -330,18 +347,24 @@ public class TransferDatabase {
 		query.append(",");
 	    }
 	}
+
 	query.append(" FROM ");
+
 	if (getPlatformSource().isDelimitedIdentifierModeOn()) {
 	    query.append(getPlatformSource().getPlatformInfo().getDelimiterToken());
 	}
+
 	query.append(table.getName());
+
 	if (getPlatformSource().isDelimitedIdentifierModeOn()) {
 	    query.append(getPlatformSource().getPlatformInfo().getDelimiterToken());
 	}
+
 	ForeignKey[] foreignKeys = table.getForeignKeys();
 	Column[] primaryKeys = table.getPrimaryKeyColumns();
 
-	List<String> orderByColumns = new ArrayList();
+	List<String> orderByColumns = new ArrayList<String>();
+
 	if (foreignKeys.length > 0) {
 	    for (int index = 0; index < foreignKeys.length; index++) {
 		Reference[] reference = foreignKeys[index].getReferences();
@@ -353,6 +376,7 @@ public class TransferDatabase {
 		}
 	    }
 	}
+
 	if (primaryKeys.length > 0) {
 	    for (int index = 0; index < primaryKeys.length; index++) {
 		String name = primaryKeys[index].getName();
@@ -361,23 +385,45 @@ public class TransferDatabase {
 		}
 	    }
 	}
+
 	if (orderByColumns.size() > 0) {
 	    query.append(" ORDER BY ");
 	    for (int index = 0; index < orderByColumns.size(); index++) {
 		if (getPlatformSource().isDelimitedIdentifierModeOn()) {
 		    query.append(getPlatformSource().getPlatformInfo().getDelimiterToken());
 		}
+
 		query.append((String) orderByColumns.get(index));
+
 		if (getPlatformSource().isDelimitedIdentifierModeOn()) {
 		    query.append(getPlatformSource().getPlatformInfo().getDelimiterToken());
 		}
+
+		query.append(getNullValueOrder());
+
 		if (index < orderByColumns.size() - 1) {
 		    query.append(",");
 		}
 	    }
 	}
+
 	System.out.print("QUERY:  " + query + "\n");
 
 	return query.toString();
+    }
+
+    protected String getNullValueOrder() {
+	String nullValueOrder = "";
+	String platform = getPlatformSource().getName();
+
+	switch (platform) {
+	case "PostgreSql":
+	case "Oracle":
+	case "Oracle9":
+	case "Oracle10":
+	    nullValueOrder = " NULLS FIRST";
+	}
+
+	return nullValueOrder;
     }
 }
