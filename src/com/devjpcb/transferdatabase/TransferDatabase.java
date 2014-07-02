@@ -17,8 +17,11 @@ import java.util.Map;
 
 import org.apache.commons.beanutils.DynaBean;
 import org.apache.commons.collections.map.ListOrderedMap;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.ddlutils.Platform;
 import org.apache.ddlutils.PlatformFactory;
+import org.apache.ddlutils.PlatformUtils;
 import org.apache.ddlutils.io.DatabaseIO;
 import org.apache.ddlutils.model.Column;
 import org.apache.ddlutils.model.Database;
@@ -39,6 +42,7 @@ public class TransferDatabase {
     private boolean autoCommit;
     private Platform platformSource;
     private Platform platformDestine;
+    private static Log log = LogFactory.getLog(TransferDatabase.class);
 
     public static TransferDatabaseConnection createConnection(Connection connection) {
 	return new TransferDatabaseConnection(connection);
@@ -129,14 +133,22 @@ public class TransferDatabase {
 	    if (this.connectionSource == null) {
 		throw new NullPointerException("connectionSource not found");
 	    }
+	    
 	    if (this.tableSchemaSource == null) {
 		throw new NullPointerException("tableSchemaSource not found");
 	    }
-	    this.platformSource = PlatformFactory.createNewPlatformInstance(new TransferDatabaseDataSource(
-		    getConnectionSource(), getTableSchemaSource()));
+	    
+	    TransferDatabaseDataSource dataSource = new TransferDatabaseDataSource(
+		    getConnectionSource(), getTableSchemaSource());
+	    
+	    this.platformSource = PlatformFactory.createNewPlatformInstance(dataSource);
 	    this.platformSource.setIdentityOverrideOn(isIdentityOverrideOn());
 	    this.platformSource.setSqlCommentsOn(isSqlCommentsOn());
 	    this.platformSource.setDelimitedIdentifierModeOn(isDelimitedIdentifierModeOn());
+
+	    PlatformUtils pUtils = new PlatformUtils();
+	    log.info("Platform DatabaseType: " + pUtils.determineDatabaseType(dataSource));
+	    log.info("Platform Source: " + platformSource.getClass().getName());
 	}
 	return this.platformSource;
     }
@@ -146,14 +158,22 @@ public class TransferDatabase {
 	    if (this.connectionDestine == null) {
 		throw new NullPointerException("connectionDestine not found");
 	    }
+	    
 	    if (this.tableSchemaDestine == null) {
 		throw new NullPointerException("tableSchemaDestine not found");
 	    }
-	    this.platformDestine = PlatformFactory.createNewPlatformInstance(new TransferDatabaseDataSource(
-		    getConnectionDestine(), getTableSchemaDestine()));
+
+	    TransferDatabaseDataSource dataSource = new TransferDatabaseDataSource(getConnectionDestine(),
+		    getTableSchemaDestine());
+
+	    this.platformDestine = PlatformFactory.createNewPlatformInstance(dataSource);
 	    this.platformDestine.setIdentityOverrideOn(isIdentityOverrideOn());
 	    this.platformDestine.setSqlCommentsOn(isSqlCommentsOn());
 	    this.platformDestine.setDelimitedIdentifierModeOn(isDelimitedIdentifierModeOn());
+
+	    PlatformUtils pUtils = new PlatformUtils();
+	    log.info("Platform DatabaseType: " + pUtils.determineDatabaseType(dataSource));
+	    log.info("Platform Destine: " + platformDestine.getClass().getName());
 	}
 	return this.platformDestine;
     }
@@ -249,14 +269,14 @@ public class TransferDatabase {
 
 	List<Table> tables = sortTables(databaseSource.getTables());
 	for (Table table : tables) {
-	    System.out.print("Getting Data From " + table.getName() + "\n");
+	    log.info("Getting Data From " + table.getName() + "\n");
 
 	    String SQL = getQueryFromTable(table);
 
 	    @SuppressWarnings("rawtypes")
 	    Iterator it = getPlatformSource().query(databaseSource, SQL, new Table[] { table });
 
-	    System.out.print("Copying Data To " + table.getName() + "\n");
+	    log.info("Copying Data To " + table.getName() + "\n");
 
 	    BigInteger total = BigInteger.ZERO;
 	    BigInteger error = BigInteger.ZERO;
@@ -273,8 +293,10 @@ public class TransferDatabase {
 		    }
 		}
 	    }
-	    System.out.print("Total records copied ( " + total + " )\n");
-	    System.out.print("Total records errors ( " + error + " )\n");
+
+	    log.info("Total records copied ( " + total + " )\n");
+	    log.info("Total records errors ( " + error + " )\n");
+
 	    if (isAutoCommit()) {
 		if (!getPlatformDestine().getDataSource().getConnection().getAutoCommit()) {
 		    getPlatformDestine().getDataSource().getConnection().commit();
@@ -293,14 +315,14 @@ public class TransferDatabase {
 	Writer writer = new OutputStreamWriter(fos, "UTF8");
 
 	for (Table table : tables) {
-	    System.out.print("Getting Data From " + table.getName() + "\n");
+	    log.info("Getting Data From " + table.getName() + "\n");
 
 	    String SQL = getQueryFromTable(table);
 
 	    @SuppressWarnings("rawtypes")
 	    Iterator it = getPlatformSource().query(databaseSource, SQL, new Table[] { table });
 
-	    System.out.print("Copying Data To " + table.getName() + "\n");
+	    log.info("Copying Data To " + table.getName() + "\n");
 	    while (it.hasNext()) {
 		DynaBean tableRowData = (DynaBean) it.next();
 		String sql = getPlatformDestine().getInsertSql(databaseSource, tableRowData);
@@ -389,6 +411,8 @@ public class TransferDatabase {
 	if (orderByColumns.size() > 0) {
 	    query.append(" ORDER BY ");
 	    for (int index = 0; index < orderByColumns.size(); index++) {
+		query.append(getPreNullValueOrder());
+
 		if (getPlatformSource().isDelimitedIdentifierModeOn()) {
 		    query.append(getPlatformSource().getPlatformInfo().getDelimiterToken());
 		}
@@ -399,7 +423,7 @@ public class TransferDatabase {
 		    query.append(getPlatformSource().getPlatformInfo().getDelimiterToken());
 		}
 
-		query.append(getNullValueOrder());
+		query.append(getPostNullValueOrder());
 
 		if (index < orderByColumns.size() - 1) {
 		    query.append(",");
@@ -407,13 +431,18 @@ public class TransferDatabase {
 	    }
 	}
 
-	System.out.print("QUERY:  " + query + "\n");
+	log.info("SQL:  " + query + "\n");
 
 	return query.toString();
     }
 
-    protected String getNullValueOrder() {
-	String nullValueOrder = "";
+    protected String getPreNullValueOrder() {
+	String preNullValueOrder = "";
+	return preNullValueOrder;
+    }
+
+    protected String getPostNullValueOrder() {
+	String postNullValueOrder = "";
 	String platform = getPlatformSource().getName();
 
 	switch (platform) {
@@ -421,9 +450,33 @@ public class TransferDatabase {
 	case "Oracle":
 	case "Oracle9":
 	case "Oracle10":
-	    nullValueOrder = " NULLS FIRST";
+	    postNullValueOrder = " NULLS FIRST";
 	}
 
-	return nullValueOrder;
+	return postNullValueOrder;
+    }
+
+    public void logInfo(String info) {
+	log.info(info);
+    }
+
+    public void logWarn(String warn) {
+	log.warn(warn);
+    }
+
+    public void logError(String error) {
+	log.error(error);
+    }
+
+    public void logFatal(String fatal) {
+	log.fatal(fatal);
+    }
+
+    public void logDebug(String debug) {
+	log.debug(debug);
+    }
+
+    public void logTrace(String trace) {
+	log.trace(trace);
     }
 }

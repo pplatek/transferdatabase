@@ -21,6 +21,7 @@
 		<pathelement location="${ddlutils.location}/lib/commons-collections-3.1.jar"/>
 		<pathelement location="${ddlutils.location}/lib/commons-beanutils-1.7.0.jar"/>
 		<pathelement location="${ddlutils.location}/lib/commons-lang-2.1.jar"/>
+		<pathelement location="${ddlutils.location}/lib/commons-logging-1.0.4.jar"/>
 	</path>
 	<target name="init">
 		<mkdir dir="bin"/>
@@ -32,6 +33,7 @@
 	</target>
 	<target name="clean">
 		<delete dir="bin"/>
+		<delete dir="dist"/>
 	</target>
 	<target depends="clean" name="cleanall"/>
 	<target depends="build-subprojects,build-project" name="build"/>
