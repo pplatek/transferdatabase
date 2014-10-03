@@ -40,6 +40,7 @@ public class TransferDatabase {
     private boolean sqlCommentsOn;
     private boolean delimitedIdentifierModeOn;
     private boolean autoCommit;
+    private boolean scriptModeOn;
     private Platform platformSource;
     private Platform platformDestine;
     private static Log log = LogFactory.getLog(TransferDatabase.class);
@@ -128,6 +129,14 @@ public class TransferDatabase {
 	return this.autoCommit;
     }
 
+    public boolean isScriptModeOn() {
+        return scriptModeOn;
+    }
+
+    public void setScriptModeOn(boolean scriptModeOn) {
+        this.scriptModeOn = scriptModeOn;
+    }
+
     protected Platform getPlatformSource() {
 	if (this.platformSource == null) {
 	    if (this.connectionSource == null) {
@@ -145,6 +154,7 @@ public class TransferDatabase {
 	    this.platformSource.setIdentityOverrideOn(isIdentityOverrideOn());
 	    this.platformSource.setSqlCommentsOn(isSqlCommentsOn());
 	    this.platformSource.setDelimitedIdentifierModeOn(isDelimitedIdentifierModeOn());
+	    this.platformSource.setScriptModeOn(isScriptModeOn());
 
 	    PlatformUtils pUtils = new PlatformUtils();
 	    log.info("Platform DatabaseType: " + pUtils.determineDatabaseType(dataSource));
@@ -170,6 +180,7 @@ public class TransferDatabase {
 	    this.platformDestine.setIdentityOverrideOn(isIdentityOverrideOn());
 	    this.platformDestine.setSqlCommentsOn(isSqlCommentsOn());
 	    this.platformDestine.setDelimitedIdentifierModeOn(isDelimitedIdentifierModeOn());
+	    this.platformDestine.setScriptModeOn(isScriptModeOn());
 
 	    PlatformUtils pUtils = new PlatformUtils();
 	    log.info("Platform DatabaseType: " + pUtils.determineDatabaseType(dataSource));
